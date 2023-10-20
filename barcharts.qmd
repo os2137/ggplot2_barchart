@@ -1,0 +1,310 @@
+---
+title: "barcharts"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+# [**Fix stacked bar charts in seconds**](https://www.youtube.com/watch?v=3exV7ZjarxA&t=280s)
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+mpg_2008 <- mpg |> 
+  filter(year == 2008, 
+         !(class %in% c('2seater', 'minivan')), 
+  ) |> 
+  mutate(
+    class = case_when(
+      class %in% c('compact', 'subcompact') ~ '(Sub-)Compact',
+      class %in% c('pickup', 'suv') ~ 'Pickup/SUV', 
+      TRUE ~ str_to_title(class)
+    ), 
+    manufacturer = str_to_title(manufacturer), 
+    manufacturer = fct_infreq(manufacturer) |> fct_rev()
+  )
+```
+
+```{r}
+colors <- thematic::okabe_ito(4)
+split_plot <- mpg_2008 |> 
+  ggplot(
+    aes(y = manufacturer, fill = class)) + 
+  geom_bar() + 
+  geom_vline(xintercept = 0) +
+  theme_minimal(
+    base_size = 20, base_family = 'Source Sans Pro'
+  ) + 
+  scale_fill_manual(values = colors[1:3]) + 
+  facet_wrap(vars(class)) + 
+  labs(
+    x = element_blank(), 
+    y = element_blank()
+  ) + 
+  theme(panel.grid.minor = element_blank(), 
+        panel.grid.major.y = element_blank(),
+legend.position = 'none')
+```
+
+```{r}
+# lets create a total value barchart
+total_plot <- mpg_2008 |> 
+  ggplot(
+    aes(y = manufacturer)) + 
+  geom_bar( fill = colors[4]) + 
+  geom_vline(xintercept = 0) +
+  theme_minimal(
+    base_size = 20, base_family = 'Source Sans Pro'
+  ) + 
+  
+  facet_wrap(vars('Total')) + 
+  labs(
+    x = element_blank(), 
+    y = element_blank()
+  ) + 
+  theme(panel.grid.minor = element_blank(), 
+        panel.grid.major.y = element_blank(),
+legend.position = 'none') + 
+  scale_y_discrete(labels = element_blank())
+
+```
+
+```{r}
+library(patchwork)
+
+split_plot + total_plot + 
+  plot_layout(widths = c(3.1, 1)) +
+  plot_annotation(
+    title =  'Cars in the data set by manufacturer and class', 
+    theme = theme(
+      title = element_text(
+        size = 20, family = "Merriweather"
+      )
+    )
+  )
+```
+
+# [**How to Make a Diverging Bar Chart in R**](https://www.youtube.com/watch?v=uR2m7rzRqYw&t=106s)
+
+```{r}
+library(scales)
+```
+
+## Creating some fake data
+
+```{r}
+set.seed(1234)
+
+school_quality <- tibble(
+  id = seq(1, 300, 1), 
+  school = rep(c('Sabin', 'Vernon', 'Faubion', 'Irvington', 'Alameda', 'Beverly Cleary'), 50), 
+  opinion = sample(c('Very bad', 'Bad', 'Good', 'Very good'), 300, replace = TRUE)
+)
+school_quality 
+```
+
+```{r}
+school_quality_summary <- school_quality |> 
+  group_by(school, opinion) |> 
+    count(name = "n_answers") |> 
+    group_by(school) |> 
+    mutate(percent_answers = n_answers/sum(n_answers)) |> 
+    ungroup() |> 
+    mutate(percent_answers_label = percent(percent_answers, accuracy = 1))
+school_quality_summary 
+```
+
+```{r}
+school_quality_summary |> 
+  ggplot(aes(x = school, y = percent_answers, fill = opinion)) + 
+  geom_col() + 
+  geom_text(aes(label = percent_answers_label),
+            position = position_stack(vjust = 0.5),
+                color = 'white', 
+                fontface = 'bold') + 
+  coord_flip() + 
+  scale_x_discrete() +
+  scale_fill_viridis_d() + 
+  labs(
+    x = NULL, 
+    title = "How good is the education at your school", 
+    fill = NULL
+  ) + 
+  theme_minimal() + 
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank(), 
+        panel.grid = element_blank(), 
+        legend.position = 'top')
+```
+
+## Basic Diverging Bar chart
+
+```{r}
+school_quality_summary_diverging <- school_quality_summary |> 
+  mutate(percent_answers = if_else(opinion %in% c('Very good', 'Good'), percent_answers, -percent_answers), 
+         percent_answers_label = percent(percent_answers, accuracy = 1))
+school_quality_summary_diverging
+```
+
+now we can make a basic diverging bar chart
+
+```{r}
+school_quality_summary_diverging |> 
+  ggplot(aes(y = school, 
+             x = percent_answers, 
+             fill = opinion)) + 
+  geom_col() + 
+  geom_text(
+    aes(label= percent_answers_label), 
+    position = position_stack(vjust = 0.5), 
+    color = 'white', 
+    fontface = 'bold'
+  ) +
+ 
+  scale_fill_viridis_d() + 
+  labs(
+    x = NULL, 
+    title = "How good is the education at your school", 
+    fill = NULL
+  ) + 
+  theme_minimal() + 
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank(), 
+        panel.grid = element_blank(), 
+        legend.position = 'top')
+```
+
+## Positive/Negative Labels
+
+Lets change the negative label to just positive label, because that what it is.
+
+```{r}
+school_quality_summary_diverging_good_labels <- school_quality_summary_diverging |> 
+  mutate(percent_answers = abs(percent_answers), 
+         percent_answers_label = percent(percent_answers, accuracy = 1)) 
+  school_quality_summary_diverging_good_labels
+```
+
+```{r}
+school_quality_summary_diverging_good_labels |> 
+ggplot(aes(y = school, 
+             x = percent_answers, 
+             fill = opinion)) + 
+  geom_col() + 
+  geom_text(
+    aes(label= percent_answers_label), 
+    position = position_stack(vjust = 0.5), 
+    color = 'white', 
+    fontface = 'bold'
+  ) +
+ 
+  scale_fill_viridis_d() + 
+  labs(
+    x = NULL, 
+    title = "How good is the education at your school", 
+    fill = NULL
+  ) + 
+  theme_minimal() + 
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank(), 
+        panel.grid = element_blank(), 
+        legend.position = 'top')
+```
+
+## Lets order the bar in the alphabetical order
+
+```{r}
+school_quality_summary_diverging_right_order <- school_quality_summary_diverging_good_labels |> 
+  mutate(opinion = fct_relevel(opinion, 'Very bad', 'Bad', 'Good', 'Very good'),
+    opinion = fct_rev(opinion))
+school_quality_summary_diverging_right_order
+```
+
+```{r}
+school_quality_summary_diverging_right_order |> 
+ggplot(aes(y = school, 
+             x = percent_answers, 
+             fill = opinion)) + 
+  geom_col() + 
+  geom_text(
+    aes(label= percent_answers_label), 
+    position = position_stack(vjust = 0.5), 
+    color = 'white', 
+    fontface = 'bold'
+  ) +
+ 
+  scale_fill_viridis_d() + 
+  labs(
+    x = NULL, 
+    title = "How good is the education at your school", 
+    fill = NULL
+  ) + 
+  theme_minimal() + 
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank(), 
+        panel.grid = element_blank(), 
+        legend.position = 'top')
+```
+
+Now lets align the legend currently it says bad, very bad, good, very good
+
+```{r}
+school_quality_summary_diverging_right_order |> 
+ggplot(aes(y = school, 
+             x = percent_answers, 
+             fill = opinion)) + 
+  geom_col() + 
+  geom_text(
+    aes(label= percent_answers_label), 
+    position = position_stack(vjust = 0.5), 
+    color = 'white', 
+    fontface = 'bold'
+  ) +
+ scale_fill_viridis_d(breaks = c('Very bad', 'Bad', 'Good', 'Very good')) + #breaks argument just makes the legend order match
+  labs(
+    x = NULL, 
+    title = "How good is the education at your school", 
+    fill = NULL
+  ) + 
+  theme_minimal() + 
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank(), 
+        panel.grid = element_blank(), 
+        legend.position = 'top')
+```
+
+## Improve Colors
+
+```{r}
+school_quality_summary_diverging_right_order |> 
+ggplot(aes(y = school, 
+             x = percent_answers, 
+             fill = opinion)) + 
+  geom_col() + 
+  geom_text(
+    aes(label= percent_answers_label), 
+    position = position_stack(vjust = 0.5), 
+    color = 'white', 
+    fontface = 'bold'
+  ) +
+ scale_fill_manual(breaks = c('Very bad', 'Bad', 'Good', 'Very good'), 
+                   values = c(
+                     "Very bad" = "darkorange3", 
+                     "Bad" = "orange", 
+                     "Good" = "deepskyblue", 
+                     "Very good" = "deepskyblue4"
+                   )) + 
+  labs(
+    x = NULL, 
+    title = "How good is the education at your school", 
+    fill = NULL
+  ) + 
+  theme_minimal() + 
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank(), 
+        panel.grid = element_blank(), 
+        legend.position = 'top')
+```
